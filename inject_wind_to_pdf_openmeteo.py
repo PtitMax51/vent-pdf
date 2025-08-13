@@ -89,7 +89,7 @@ def draw_cartouche(page: fitz.Page, text: str, x: float, y: float, w: float, h: 
     inner = fitz.Rect(rect.x0 + p, rect.y0 + p, rect.x1 - p, rect.y1 - p)
 
     # texte multi-lignes aligné à droite, gras (helvb = Helvetica Bold)
-    page.insert_textbox(inner, text, fontname="helvb", fontsize=fontsize, color=text_black, align=2)
+    page.insert_textbox(inner, text, fontname="helv", fontsize=fontsize, color=text_black, align=2)
 
 
 # --------- Programme principal ---------
