@@ -32,7 +32,6 @@ jobs:
 
       - name: Generate PDF into docs/
         run: |
-          # Génère directement le PDF final DANS docs/
           python inject_wind_to_pdf_openmeteo.py \
             --ville "Reims" \
             --input "mon_document.pdf" \
@@ -46,3 +45,8 @@ jobs:
           git add docs/.nojekyll docs/sortie.pdf
           git commit -m "auto-update sortie.pdf" || echo "Nothing to commit"
           git push
+
+      - name: Show public PDF link
+        run: |
+          echo "Votre PDF est disponible ici :"
+          echo "https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY##*/}/sortie.pdf"
