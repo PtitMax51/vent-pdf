@@ -68,5 +68,5 @@ jobs:
 
       - name: Show public links
         run: |
-          echo "Reims   : https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY##*/}/sortie.pdf"
-          echo "Epernay : https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY##*/}/sortie_epernay.pdf"
+          echo "Reims   : https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY##*/}/sortie.pdf?v=${GITHUB_RUN_ID}"
+          echo "Epernay : https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY##*/}/sortie_epernay.pdf?v=${GITHUB_RUN_ID}"
