@@ -144,7 +144,7 @@ def main():
     force = f"{spd:.1f} km/h" if spd is not None else "N/A"
 
     if args.compact:
-        l3 = f"Dir : {direction}"
+        l3 = f"Direction : {direction}"
         l4 = f"Force : {force}"
     else:
         l3 = f"Direction du vent : {direction}"
