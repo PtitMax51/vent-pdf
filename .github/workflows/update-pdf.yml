@@ -5,13 +5,12 @@ on:
     - cron: "*/5 * * * *"      # toutes les 5 minutes (UTC)
   workflow_dispatch: {}        # bouton "Run workflow" manuel
 
-# Évite que deux runs simultanés se marchent dessus (conflits de push)
 concurrency:
   group: update-pdf
   cancel-in-progress: true
 
 permissions:
-  contents: write              # autorise le push via GITHUB_TOKEN
+  contents: write              # autorise le push avec le GITHUB_TOKEN
 
 jobs:
   build:
@@ -20,7 +19,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          persist-credentials: true  # garde le token pour git push
+          persist-credentials: true
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -43,23 +42,18 @@ jobs:
             --ville "Reims" \
             --input "mon_document.pdf" \
             --output "docs/sortie.pdf" \
-            --w 135 --h 66 --fontsize 10 --margin 12 --compact
+            --w 135 --h 66 --fontsize 10 --margin 12
 
-      # 🔧 Synchronisation avant push pour éviter l'erreur "rejected (fetch first)"
-      - name: Commit & push updated PDF (with sync)
+      - name: Commit & push updated PDF (sync first)
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # Récupère les derniers changements du dépôt distant
           git fetch origin main
-          # Rebase sur la dernière version distante pour éviter un merge commit
           git pull --rebase origin main || true
 
           git add docs/.nojekyll docs/sortie.pdf
           git commit -m "auto-update sortie.pdf" || echo "No changes to commit"
-
-          # Pousse la HEAD locale vers main (plus robuste que `git push` simple)
           git push origin HEAD:main
 
       - name: Show public PDF link
