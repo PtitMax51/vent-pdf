@@ -1,14 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""
-Cartouche météo (4 lignes) en haut-droite d’un PDF.
-- Open-Meteo (sans clé) pour géocodage et vent actuel
-- Écriture ligne-par-ligne dans des textboxes alignées à droite
-- Police Times-Roman (gère parfaitement les accents) + fallback helv
-- Libellés : "Direction" et "Vitesse"
-"""
-
 import argparse
 from datetime import datetime
 import requests
@@ -17,15 +9,12 @@ import fitz  # PyMuPDF
 
 # ---------- Utilitaires ----------
 def deg_to_compass(deg: float) -> str:
-    """Direction cardinale FR (O pour Ouest)."""
     arr = ["N","NNE","NE","ENE","E","ESE","SE","SSE",
            "S","SSO","SO","OSO","O","ONO","NO","NNO"]
     ix = int((deg / 22.5) + 0.5) % 16
     return arr[ix]
 
-
 def geocode_city(query: str):
-    """Nom de ville -> lat/lon/timezone via Open-Meteo."""
     url = "https://geocoding-api.open-meteo.com/v1/search"
     r = requests.get(url, params={"name": query, "count": 1, "language": "fr", "format": "json"}, timeout=20)
     r.raise_for_status()
@@ -34,73 +23,71 @@ def geocode_city(query: str):
     if not results:
         raise ValueError(f"Ville introuvable : {query}")
     top = results[0]
-    return {
-        "name": top.get("name") or query,
-        "lat": top.get("latitude"),
-        "lon": top.get("longitude"),
-        "timezone": top.get("timezone") or "auto",
-    }
-
+    return {"name": top.get("name") or query,
+            "lat": top.get("latitude"),
+            "lon": top.get("longitude"),
+            "timezone": top.get("timezone") or "auto"}
 
 def fetch_current_wind(lat: float, lon: float, tz: str = "auto"):
-    """Vent actuel (km/h + direction) + horodatage local."""
     url = "https://api.open-meteo.com/v1/forecast"
-    params = {
-        "latitude": lat,
-        "longitude": lon,
-        "current": "wind_speed_10m,wind_direction_10m",
-        "timezone": tz if tz else "auto",
-    }
+    params = {"latitude": lat, "longitude": lon,
+              "current": "wind_speed_10m,wind_direction_10m",
+              "timezone": tz if tz else "auto"}
     r = requests.get(url, params=params, timeout=20)
     r.raise_for_status()
     cur = (r.json() or {}).get("current", {})
-    return {
-        "speed_kmh": cur.get("wind_speed_10m"),
-        "deg": cur.get("wind_direction_10m"),
-        "time": cur.get("time"),  # ISO local
-    }
+    return {"speed_kmh": cur.get("wind_speed_10m"),
+            "deg": cur.get("wind_direction_10m"),
+            "time": cur.get("time")}
 
+# ---------- Rendu robuste (ne laisse jamais une ligne vide) ----------
+def _textbox_right_try(page: fitz.Page, rect: fitz.Rect, text: str, fontsize: float) -> bool:
+    """Essaye textbox alignée à droite. True si qqch a été écrit (n>0)."""
+    for font in ("Times-Roman", "helv"):
+        try:
+            n = page.insert_textbox(rect, text, fontname=font, fontsize=fontsize, color=(0,0,0), align=2)
+            if n and n > 0:
+                return True
+        except Exception:
+            pass
+    return False
 
-# ---------- Rendu : textboxes alignées à droite (robuste avec accents) ----------
-def _write_line_textbox_right(page: fitz.Page, rect: fitz.Rect, text: str, fontsize: float):
-    """
-    Écrit une ligne dans une petite textbox alignée à droite.
-    Police Times-Roman (support impeccable des accents). Fallback 'helv' si besoin.
-    """
-    try:
-        page.insert_textbox(rect, text, fontname="Times-Roman",
-                            fontsize=fontsize, color=(0, 0, 0), align=2)  # 2 = right
-        return
-    except Exception:
-        pass
-    # fallback
-    page.insert_textbox(rect, text, fontname="helv",
-                        fontsize=fontsize, color=(0, 0, 0), align=2)
-
+def _manual_right(page: fitz.Page, right_x: float, baseline_y: float, text: str, fontsize: float):
+    """Écriture manuelle alignée à droite (fallback garanti)."""
+    for font in ("Times-Roman", "helv"):
+        try:
+            width = fitz.get_text_length(text, fontname=font, fontsize=fontsize)
+            page.insert_text((right_x - width, baseline_y), text,
+                             fontname=font, fontsize=fontsize, color=(0,0,0))
+            return
+        except Exception:
+            continue
+    # dernier recours (au cas où)
+    page.insert_text((right_x - 200, baseline_y), text, fontsize=fontsize, color=(0,0,0))
 
 def draw_cartouche(page: fitz.Page, x: float, y: float, w: float, h: float,
                    lines, fontsize: float = 10.0, fill: bool = True):
-    """Cadre gris + (option) fond blanc + 4 lignes alignées à droite via textboxes."""
+    """Cadre + fond + 4 lignes. Pour chaque ligne : textbox droite, sinon fallback manuel."""
     border = (0.75, 0.75, 0.75)
     rect = fitz.Rect(x, y, x + w, y + h)
 
-    # Cadre + fond
     shape = page.new_shape()
     shape.draw_rect(rect)
-    shape.finish(color=border, fill=(1, 1, 1) if fill else None, width=0.5)
+    shape.finish(color=border, fill=(1,1,1) if fill else None, width=0.5)
     shape.commit()
 
-    # Zone interne avec padding
     p = 6
     inner = fitz.Rect(rect.x0 + p, rect.y0 + p, rect.x1 - p, rect.y1 - p)
 
-    # Hauteur de ligne et rendu
-    line_h = fontsize + 3.0
+    line_h = fontsize + 5.0        # un peu plus haut pour éviter le clipping
     for i, txt in enumerate(lines):
+        # petite textbox pour la ligne i
         top = inner.y0 + i * line_h
-        line_rect = fitz.Rect(inner.x0, top, inner.x1, top + line_h + 2)
-        _write_line_textbox_right(page, line_rect, txt, fontsize)
-
+        line_rect = fitz.Rect(inner.x0, top, inner.x1, top + line_h + 4)
+        wrote = _textbox_right_try(page, line_rect, txt, fontsize)
+        if not wrote:
+            # fallback: écriture droite manuelle
+            _manual_right(page, inner.x1, top + fontsize, txt, fontsize)
 
 # ---------- Programme principal ----------
 def main():
@@ -112,7 +99,7 @@ def main():
     ap.add_argument("--h", type=float, default=66.0)
     ap.add_argument("--fontsize", type=float, default=10.0)
     ap.add_argument("--margin", type=float, default=12.0)
-    ap.add_argument("--no-fill", action="store_true", help="Ne pas remplir le fond en blanc (diagnostic)")
+    ap.add_argument("--no-fill", action="store_true")
     args = ap.parse_args()
 
     info = geocode_city(args.ville)
@@ -120,7 +107,6 @@ def main():
 
     ville = info.get("name") or args.ville
 
-    # Date locale avec année
     when_iso = meteo.get("time")
     if when_iso:
         try:
@@ -131,21 +117,14 @@ def main():
     else:
         date_txt = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    # Direction / Vitesse
     deg = meteo.get("deg")
     direction = deg_to_compass(float(deg)) if deg is not None else "N/A"
     spd = meteo.get("speed_kmh")
     vitesse = f"{spd:.1f} km/h" if spd is not None else "N/A"
 
-    lines = [
-        ville,
-        date_txt,
-        f"Direction : {direction}",
-        f"Vitesse : {vitesse}",
-    ]
+    lines = [ville, date_txt, f"Direction : {direction}", f"Vitesse : {vitesse}"]
     print("DEBUG lines_injected =", lines)
 
-    # Ouverture & rendu
     doc = fitz.open(args.input)
     try:
         page = doc[0]
@@ -158,7 +137,6 @@ def main():
         print(f"OK. PDF généré : {args.output}")
     finally:
         doc.close()
-
 
 if __name__ == "__main__":
     main()
