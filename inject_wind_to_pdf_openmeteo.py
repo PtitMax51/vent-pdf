@@ -138,7 +138,7 @@ def main():
         ville,
         date_txt,
         f"Direction : {direction}",
-        f"Force : {force_txt}",
+        f"Vitesse : {force_txt}",
     ]
     print("DEBUG lines_injected =", lines)
 
