@@ -1,20 +1,40 @@
-name: Update PDF every 5 minutes
+name: Update PDFs (Reims & Epernay) every 5 minutes
 
 on:
   schedule:
     - cron: "*/5 * * * *"      # toutes les 5 minutes (UTC)
-  workflow_dispatch: {}        # bouton "Run workflow" manuel
+  workflow_dispatch: {}
 
 concurrency:
   group: update-pdf
   cancel-in-progress: true
 
 permissions:
-  contents: write              # autorise le push avec le GITHUB_TOKEN
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        city:
+          - name: "Reims, France"
+            input: "mon_document.pdf"
+            output: "docs/sortie.pdf"
+            w: 135
+            h: 66
+            fontsize: 10
+            margin: 12
+          - name: "Epernay, France"
+            input: "mon_document_epernay.pdf"
+            output: "docs/sortie_epernay.pdf"
+            w: 135
+            h: 66
+            fontsize: 10
+            margin: 12
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,7 +46,7 @@ jobs:
         with:
           python-version: "3.x"
 
-      - name: Install deps
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install requests PyMuPDF
@@ -36,15 +56,16 @@ jobs:
           mkdir -p docs
           touch docs/.nojekyll
 
-      - name: Generate PDF into docs/
+      - name: Generate PDF for ${{ matrix.city.name }}
         run: |
           python inject_wind_to_pdf_openmeteo.py \
-            --ville "Reims" \
-            --input "mon_document.pdf" \
-            --output "docs/sortie.pdf" \
-            --w 135 --h 66 --fontsize 10 --margin 12
+            --ville "${{ matrix.city.name }}" \
+            --input "${{ matrix.city.input }}" \
+            --output "${{ matrix.city.output }}" \
+            --w ${{ matrix.city.w }} --h ${{ matrix.city.h }} \
+            --fontsize ${{ matrix.city.fontsize }} --margin ${{ matrix.city.margin }}
 
-      - name: Commit & push updated PDF (sync first)
+      - name: Commit & push updated PDFs (sync first)
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -52,11 +73,11 @@ jobs:
           git fetch origin main
           git pull --rebase origin main || true
 
-          git add docs/.nojekyll docs/sortie.pdf
-          git commit -m "auto-update sortie.pdf" || echo "No changes to commit"
+          git add docs/.nojekyll docs/sortie.pdf docs/sortie_epernay.pdf || true
+          git commit -m "auto-update Reims & Epernay" || echo "No changes to commit"
           git push origin HEAD:main
 
-      - name: Show public PDF link
+      - name: Show public PDF links
         run: |
-          echo "Votre PDF est disponible ici :"
-          echo "https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY##*/}/sortie.pdf"
+          echo "Reims   : https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY##*/}/sortie.pdf"
+          echo "Epernay : https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY##*/}/sortie_epernay.pdf"
