@@ -2,7 +2,7 @@ name: Update PDFs (Reims & Epernay) every 5 minutes
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/5 * * * *"        # toutes les 5 minutes (UTC)
   workflow_dispatch: {}
 
 concurrency:
@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: write               # nécessaire pour git push
 
 jobs:
   build:
@@ -27,46 +27,35 @@ jobs:
         with:
           python-version: "3.x"
 
-      - name: Install dependencies
+      - name: Install deps
         run: |
           python -m pip install --upgrade pip
           pip install requests PyMuPDF
 
-      - name: Ensure docs/ and disable Jekyll
+      - name: Generate PDFs into docs/
         run: |
           mkdir -p docs
           touch docs/.nojekyll
 
-      - name: Generate Reims
-        run: |
+          # Reims
           python inject_wind_to_pdf_openmeteo.py \
             --ville "Reims, France" \
             --input "mon_document.pdf" \
             --output "docs/sortie.pdf" \
             --w 125 --h 85 --fontsize 12 --title-fontsize 14 --margin 12
 
-      - name: Generate Epernay
-        run: |
-          # Assure-toi que mon_document_epernay.pdf est bien à la racine du repo
+          # Epernay
           python inject_wind_to_pdf_openmeteo.py \
             --ville "Epernay, France" \
             --input "mon_document_epernay.pdf" \
             --output "docs/sortie_epernay.pdf" \
             --w 125 --h 85 --fontsize 12 --title-fontsize 14 --margin 12
 
-      - name: Commit & push updated PDFs (sync first)
+      - name: Commit & push updated PDFs
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git fetch origin main
-          git pull --rebase origin main || true
-
           git add docs/.nojekyll docs/sortie.pdf docs/sortie_epernay.pdf
-          git commit -m "auto-update Reims & Epernay" || echo "No changes to commit"
+          git commit -m "auto-update PDFs (Reims & Epernay)" || echo "No changes"
           git push origin HEAD:main
-
-      - name: Show public links
-        run: |
-          echo "Reims   : https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY##*/}/sortie.pdf?v=${GITHUB_RUN_ID}"
-          echo "Epernay : https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY##*/}/sortie_epernay.pdf?v=${GITHUB_RUN_ID}"
