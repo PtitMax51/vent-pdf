@@ -2,31 +2,46 @@ name: Update PDF every 5 minutes
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
-  workflow_dispatch:
+    - cron: "*/5 * * * *"      # toutes les 5 minutes (UTC)
+  workflow_dispatch: {}        # bouton "Run workflow"
+
+permissions:
+  contents: write              # indispensable pour git push
 
 jobs:
-  update-pdf:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.x"
 
-      - name: Install dependencies
-        run: pip install requests PyMuPDF
-
-      - name: Run PDF update script
-        run: python inject_wind_to_pdf_openmeteo.py --ville "Reims" --input mon_document.pdf --output mon_document.pdf
-
-      - name: Commit and push updated PDF
+      - name: Install deps
         run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@github.com"
-          git add mon_document.pdf
-          git commit -m "Auto-update PDF"
+          python -m pip install --upgrade pip
+          pip install requests PyMuPDF
+
+      - name: Ensure docs/ and .nojekyll (disable Jekyll)
+        run: |
+          mkdir -p docs
+          touch docs/.nojekyll
+
+      - name: Generate PDF
+        run: |
+          python inject_wind_to_pdf_openmeteo.py \
+            --ville "Reims" \
+            --input "mon_document.pdf" \
+            --output "docs/sortie.pdf" \
+            --w 135 --h 66 --fontsize 9 --margin 12 --compact
+
+      - name: Commit & push updated PDF
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/.nojekyll docs/sortie.pdf
+          git commit -m "auto-update sortie.pdf" || echo "Nothing to commit"
           git push
