@@ -43,7 +43,7 @@ jobs:
             --ville "Reims, France" \
             --input "mon_document.pdf" \
             --output "docs/sortie.pdf" \
-            --w 120 --h 90 --fontsize 12 --title-fontsize 14 --margin 12
+            --w 125 --h 85 --fontsize 12 --title-fontsize 14 --margin 12
 
       - name: Generate Epernay
         run: |
@@ -52,7 +52,7 @@ jobs:
             --ville "Epernay, France" \
             --input "mon_document_epernay.pdf" \
             --output "docs/sortie_epernay.pdf" \
-            --w 120 --h 90 --fontsize 12 --title-fontsize 14 --margin 12
+            --w 125 --h 85 --fontsize 12 --title-fontsize 14 --margin 12
 
       - name: Commit & push updated PDFs (sync first)
         run: |
