@@ -3,9 +3,9 @@
 
 import argparse
 from datetime import datetime
+from zoneinfo import ZoneInfo  # <-- pour l'heure locale "maintenant"
 import requests
 import fitz  # PyMuPDF
-
 
 # ---------- Utilitaires ----------
 def deg_to_compass(deg: float) -> str:
@@ -26,7 +26,7 @@ def geocode_city(query: str):
     return {"name": top.get("name") or query,
             "lat": top.get("latitude"),
             "lon": top.get("longitude"),
-            "timezone": top.get("timezone") or "auto"}
+            "timezone": top.get("timezone") or "UTC"}
 
 def fetch_current_wind(lat: float, lon: float, tz: str = "auto"):
     url = "https://api.open-meteo.com/v1/forecast"
@@ -40,34 +40,21 @@ def fetch_current_wind(lat: float, lon: float, tz: str = "auto"):
             "deg": cur.get("wind_direction_10m"),
             "time": cur.get("time")}
 
-# ---------- Rendu robuste (ne laisse jamais une ligne vide) ----------
-def _textbox_right_try(page: fitz.Page, rect: fitz.Rect, text: str, fontsize: float) -> bool:
-    """Essaye textbox alignée à droite. True si qqch a été écrit (n>0)."""
-    for font in ("Times-Roman", "helv"):
-        try:
-            n = page.insert_textbox(rect, text, fontname=font, fontsize=fontsize, color=(0,0,0), align=2)
-            if n and n > 0:
-                return True
-        except Exception:
-            pass
-    return False
-
-def _manual_right(page: fitz.Page, right_x: float, baseline_y: float, text: str, fontsize: float):
-    """Écriture manuelle alignée à droite (fallback garanti)."""
+# ---------- Rendu 100% manuel (pas de textbox) ----------
+def _draw_line_right(page: fitz.Page, right_x: float, baseline_y: float,
+                     text: str, fontsize: float):
     for font in ("Times-Roman", "helv"):
         try:
             width = fitz.get_text_length(text, fontname=font, fontsize=fontsize)
-            page.insert_text((right_x - width, baseline_y), text,
-                             fontname=font, fontsize=fontsize, color=(0,0,0))
+            page.insert_text((right_x - width, baseline_y),
+                             text, fontname=font, fontsize=fontsize, color=(0,0,0))
             return
         except Exception:
             continue
-    # dernier recours (au cas où)
     page.insert_text((right_x - 200, baseline_y), text, fontsize=fontsize, color=(0,0,0))
 
 def draw_cartouche(page: fitz.Page, x: float, y: float, w: float, h: float,
                    lines, fontsize: float = 10.0, fill: bool = True):
-    """Cadre + fond + 4 lignes. Pour chaque ligne : textbox droite, sinon fallback manuel."""
     border = (0.75, 0.75, 0.75)
     rect = fitz.Rect(x, y, x + w, y + h)
 
@@ -79,15 +66,11 @@ def draw_cartouche(page: fitz.Page, x: float, y: float, w: float, h: float,
     p = 6
     inner = fitz.Rect(rect.x0 + p, rect.y0 + p, rect.x1 - p, rect.y1 - p)
 
-    line_h = fontsize + 5.0        # un peu plus haut pour éviter le clipping
-    for i, txt in enumerate(lines):
-        # petite textbox pour la ligne i
-        top = inner.y0 + i * line_h
-        line_rect = fitz.Rect(inner.x0, top, inner.x1, top + line_h + 4)
-        wrote = _textbox_right_try(page, line_rect, txt, fontsize)
-        if not wrote:
-            # fallback: écriture droite manuelle
-            _manual_right(page, inner.x1, top + fontsize, txt, fontsize)
+    line_h = fontsize + 5.0
+    baseline = inner.y0 + fontsize
+    for txt in lines:
+        _draw_line_right(page, inner.x1, baseline, txt, fontsize)
+        baseline += line_h
 
 # ---------- Programme principal ----------
 def main():
@@ -107,15 +90,11 @@ def main():
 
     ville = info.get("name") or args.ville
 
-    when_iso = meteo.get("time")
-    if when_iso:
-        try:
-            dt = datetime.fromisoformat(when_iso)
-            date_txt = dt.strftime("%d/%m/%Y %H:%M")
-        except Exception:
-            date_txt = when_iso
-    else:
-        date_txt = datetime.now().strftime("%d/%m/%Y %H:%M")
+    # >>> Horodatage = MAINTENANT dans le fuseau de la ville <<<
+    try:
+        date_txt = datetime.now(ZoneInfo(info.get("timezone") or "UTC")).strftime("%d/%m/%Y %H:%M")
+    except Exception:
+        date_txt = datetime.utcnow().strftime("%d/%m/%Y %H:%M")
 
     deg = meteo.get("deg")
     direction = deg_to_compass(float(deg)) if deg is not None else "N/A"
