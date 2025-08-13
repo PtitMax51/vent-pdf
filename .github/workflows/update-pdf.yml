@@ -3,10 +3,10 @@ name: Update PDF every 5 minutes
 on:
   schedule:
     - cron: "*/5 * * * *"      # toutes les 5 minutes (UTC)
-  workflow_dispatch: {}        # bouton "Run workflow"
+  workflow_dispatch: {}        # bouton "Run workflow" manuel
 
 permissions:
-  contents: write              # indispensable pour git push
+  contents: write              # autorise le git push
 
 jobs:
   build:
@@ -25,18 +25,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests PyMuPDF
 
-      - name: Ensure docs/ and .nojekyll (disable Jekyll)
+      - name: Ensure docs/ and disable Jekyll
         run: |
           mkdir -p docs
           touch docs/.nojekyll
 
-      - name: Generate PDF
+      - name: Generate PDF into docs/
         run: |
+          # Génère directement le PDF final DANS docs/
           python inject_wind_to_pdf_openmeteo.py \
             --ville "Reims" \
             --input "mon_document.pdf" \
             --output "docs/sortie.pdf" \
-            --w 135 --h 66 --fontsize 9 --margin 12 --compact
+            --w 135 --h 66 --fontsize 10 --margin 12 --compact
 
       - name: Commit & push updated PDF
         run: |
