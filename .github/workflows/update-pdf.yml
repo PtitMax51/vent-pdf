@@ -2,7 +2,7 @@ name: Update PDFs (Reims & Epernay) every 5 minutes
 
 on:
   schedule:
-    - cron: "*/5 * * * *"      # toutes les 5 minutes (UTC)
+    - cron: "*/5 * * * *"
   workflow_dispatch: {}
 
 concurrency:
@@ -15,25 +15,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    strategy:
-      fail-fast: false
-      matrix:
-        city:
-          - name: "Reims, France"
-            input: "mon_document.pdf"
-            output: "docs/sortie.pdf"
-            w: 135
-            h: 66
-            fontsize: 10
-            margin: 12
-          - name: "Epernay, France"
-            input: "mon_document_epernay.pdf"
-            output: "docs/sortie_epernay.pdf"
-            w: 135
-            h: 66
-            fontsize: 10
-            margin: 12
 
     steps:
       - name: Checkout
@@ -56,14 +37,22 @@ jobs:
           mkdir -p docs
           touch docs/.nojekyll
 
-      - name: Generate PDF for ${{ matrix.city.name }}
+      - name: Generate Reims
         run: |
           python inject_wind_to_pdf_openmeteo.py \
-            --ville "${{ matrix.city.name }}" \
-            --input "${{ matrix.city.input }}" \
-            --output "${{ matrix.city.output }}" \
-            --w ${{ matrix.city.w }} --h ${{ matrix.city.h }} \
-            --fontsize ${{ matrix.city.fontsize }} --margin ${{ matrix.city.margin }}
+            --ville "Reims, France" \
+            --input "mon_document.pdf" \
+            --output "docs/sortie.pdf" \
+            --w 135 --h 66 --fontsize 10 --margin 12
+
+      - name: Generate Epernay
+        run: |
+          # Assure-toi que mon_document_epernay.pdf est bien à la racine du repo
+          python inject_wind_to_pdf_openmeteo.py \
+            --ville "Epernay, France" \
+            --input "mon_document_epernay.pdf" \
+            --output "docs/sortie_epernay.pdf" \
+            --w 135 --h 66 --fontsize 10 --margin 12
 
       - name: Commit & push updated PDFs (sync first)
         run: |
@@ -73,11 +62,11 @@ jobs:
           git fetch origin main
           git pull --rebase origin main || true
 
-          git add docs/.nojekyll docs/sortie.pdf docs/sortie_epernay.pdf || true
+          git add docs/.nojekyll docs/sortie.pdf docs/sortie_epernay.pdf
           git commit -m "auto-update Reims & Epernay" || echo "No changes to commit"
           git push origin HEAD:main
 
-      - name: Show public PDF links
+      - name: Show public links
         run: |
           echo "Reims   : https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY##*/}/sortie.pdf"
           echo "Epernay : https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY##*/}/sortie_epernay.pdf"
