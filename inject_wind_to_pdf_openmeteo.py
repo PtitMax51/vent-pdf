@@ -3,10 +3,10 @@
 
 """
 Cartouche météo (4 lignes) en haut-droite d’un PDF.
-- Données : Open-Meteo (sans clé)
-- Police native ('helv'), repli 'Times-Roman'
-- Alignement à droite SANS utiliser 'align' (calcul de largeur)
-- Libellés : "Direction" et "Force"
+- Open-Meteo (sans clé) pour géocodage et vent actuel
+- Écriture ligne-par-ligne dans des textboxes alignées à droite
+- Police Times-Roman (gère parfaitement les accents) + fallback helv
+- Libellés : "Direction" et "Vitesse"
 """
 
 import argparse
@@ -61,23 +61,26 @@ def fetch_current_wind(lat: float, lon: float, tz: str = "auto"):
     }
 
 
-# ---------- Rendu : écriture à droite sans 'align' ----------
-def _draw_line_right(page, right_x: float, baseline_y: float, text: str, fontsize: float):
-    """Écrit une ligne alignée à droite en mesurant sa largeur."""
-    for font in ("helv", "Times-Roman"):  # police de secours
-        try:
-            width = fitz.get_text_length(text, fontname=font, fontsize=fontsize)
-            page.insert_text((right_x - width, baseline_y), text,
-                             fontname=font, fontsize=fontsize, color=(0, 0, 0))
-            return
-        except Exception:
-            continue
-    # Dernier recours : écriture sans police spécifiée (gauche)
-    page.insert_text((right_x - 200, baseline_y), text, fontsize=fontsize, color=(0, 0, 0))
+# ---------- Rendu : textboxes alignées à droite (robuste avec accents) ----------
+def _write_line_textbox_right(page: fitz.Page, rect: fitz.Rect, text: str, fontsize: float):
+    """
+    Écrit une ligne dans une petite textbox alignée à droite.
+    Police Times-Roman (support impeccable des accents). Fallback 'helv' si besoin.
+    """
+    try:
+        page.insert_textbox(rect, text, fontname="Times-Roman",
+                            fontsize=fontsize, color=(0, 0, 0), align=2)  # 2 = right
+        return
+    except Exception:
+        pass
+    # fallback
+    page.insert_textbox(rect, text, fontname="helv",
+                        fontsize=fontsize, color=(0, 0, 0), align=2)
 
 
-def draw_cartouche(page, x: float, y: float, w: float, h: float, lines, fontsize: float = 10.0, fill: bool = True):
-    """Cadre gris + fond optionnel + 4 lignes alignées à droite (manuel)."""
+def draw_cartouche(page: fitz.Page, x: float, y: float, w: float, h: float,
+                   lines, fontsize: float = 10.0, fill: bool = True):
+    """Cadre gris + (option) fond blanc + 4 lignes alignées à droite via textboxes."""
     border = (0.75, 0.75, 0.75)
     rect = fitz.Rect(x, y, x + w, y + h)
 
@@ -87,29 +90,29 @@ def draw_cartouche(page, x: float, y: float, w: float, h: float, lines, fontsize
     shape.finish(color=border, fill=(1, 1, 1) if fill else None, width=0.5)
     shape.commit()
 
-    # Zone interne (padding)
+    # Zone interne avec padding
     p = 6
     inner = fitz.Rect(rect.x0 + p, rect.y0 + p, rect.x1 - p, rect.y1 - p)
 
-    # Écriture ligne par ligne (droite)
-    baseline = inner.y0 + fontsize
-    leading = 3.0
-    for line in lines:
-        _draw_line_right(page, inner.x1, baseline, line, fontsize)
-        baseline += fontsize + leading
+    # Hauteur de ligne et rendu
+    line_h = fontsize + 3.0
+    for i, txt in enumerate(lines):
+        top = inner.y0 + i * line_h
+        line_rect = fitz.Rect(inner.x0, top, inner.x1, top + line_h + 2)
+        _write_line_textbox_right(page, line_rect, txt, fontsize)
 
 
 # ---------- Programme principal ----------
 def main():
     ap = argparse.ArgumentParser(description="Injecte un cartouche vent (4 lignes) en haut-droite du PDF.")
-    ap.add_argument("--ville", required=True)
+    ap.add_argument("--ville", required=True, help='Ex.: "Reims, France" ou "Epernay, France"')
     ap.add_argument("--input", required=True)
     ap.add_argument("--output", required=True)
     ap.add_argument("--w", type=float, default=135.0)
     ap.add_argument("--h", type=float, default=66.0)
     ap.add_argument("--fontsize", type=float, default=10.0)
     ap.add_argument("--margin", type=float, default=12.0)
-    ap.add_argument("--no-fill", action="store_true", help="Sans fond blanc (diagnostic)")
+    ap.add_argument("--no-fill", action="store_true", help="Ne pas remplir le fond en blanc (diagnostic)")
     args = ap.parse_args()
 
     info = geocode_city(args.ville)
@@ -128,17 +131,17 @@ def main():
     else:
         date_txt = datetime.now().strftime("%d/%m/%Y %H:%M")
 
+    # Direction / Vitesse
     deg = meteo.get("deg")
     direction = deg_to_compass(float(deg)) if deg is not None else "N/A"
     spd = meteo.get("speed_kmh")
-    force_txt = f"{spd:.1f} km/h" if spd is not None else "N/A"
+    vitesse = f"{spd:.1f} km/h" if spd is not None else "N/A"
 
-    # Lignes finales (avec "Direction")
     lines = [
         ville,
         date_txt,
         f"Direction : {direction}",
-        f"Vitesse : {force_txt}",
+        f"Vitesse : {vitesse}",
     ]
     print("DEBUG lines_injected =", lines)
 
@@ -146,10 +149,11 @@ def main():
     doc = fitz.open(args.input)
     try:
         page = doc[0]
-        page_rect = page.rect
-        x = page_rect.x1 - args.w - args.margin
-        y = page_rect.y0 + args.margin
-        draw_cartouche(page, x, y, args.w, args.h, lines, fontsize=args.fontsize, fill=not args.no_fill)
+        pr = page.rect
+        x = pr.x1 - args.w - args.margin
+        y = pr.y0 + args.margin
+        draw_cartouche(page, x, y, args.w, args.h, lines,
+                       fontsize=args.fontsize, fill=not args.no_fill)
         doc.save(args.output)
         print(f"OK. PDF généré : {args.output}")
     finally:
