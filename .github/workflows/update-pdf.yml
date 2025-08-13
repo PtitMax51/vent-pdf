@@ -1,0 +1,47 @@
+name: Update PDF every 5 minutes
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"      # toutes les 5 minutes (UTC)
+  workflow_dispatch: {}        # bouton "Run workflow"
+
+permissions:
+  contents: write              # nécessaire pour git push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests PyMuPDF
+
+      - name: Ensure docs/ and .nojekyll (no Jekyll build)
+        run: |
+          mkdir -p docs
+          touch docs/.nojekyll
+
+      - name: Generate PDF
+        run: |
+          python inject_wind_to_pdf_openmeteo.py \
+            --ville "Reims" \
+            --input "mon_document.pdf" \
+            --output "docs/sortie.pdf" \
+            --w 135 --h 66 --fontsize 9 --margin 12 --compact
+
+      - name: Commit & push updated PDF
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/.nojekyll docs/sortie.pdf
+          git commit -m "auto-update sortie.pdf" || echo "Nothing to commit"
+          git push
