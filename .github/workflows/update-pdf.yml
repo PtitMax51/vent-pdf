@@ -32,7 +32,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests PyMuPDF
 
-      - name: Generate PDFs into docs/
+            - name: Generate PDFs into docs/
         run: |
           mkdir -p docs
           touch docs/.nojekyll
@@ -42,14 +42,17 @@ jobs:
             --ville "Reims, France" \
             --input "mon_document.pdf" \
             --output "docs/sortie.pdf" \
-            --w 125 --h 85 --fontsize 12 --title-fontsize 14 --margin 12
+            --w 125 --h 85 --fontsize 12 --title-fontsize 14 --margin 12 \
+            --stamp "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
           # Epernay
           python inject_wind_to_pdf_openmeteo.py \
             --ville "Epernay, France" \
             --input "mon_document_epernay.pdf" \
             --output "docs/sortie_epernay.pdf" \
-            --w 125 --h 85 --fontsize 12 --title-fontsize 14 --margin 12
+            --w 125 --h 85 --fontsize 12 --title-fontsize 14 --margin 12 \
+            --stamp "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
 
       - name: Commit & push updated PDFs
         run: |
