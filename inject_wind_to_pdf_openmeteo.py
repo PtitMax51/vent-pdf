@@ -2,8 +2,9 @@
 # -*- coding: utf-8 -*-
 """
 Cartouche météo (4 lignes) en haut-droite d'un PDF – compatible GitHub Actions.
-- Texte noir, écrit ligne par ligne, aligné à droite
-- Police native ('helv'), repli 'Times-Roman' si besoin
+- Texte noir, aligné à droite
+- Police native 'helv' (fallback 'Times-Roman')
+- Double rendu : textbox alignée à droite, sinon écriture ligne-par-ligne
 - Points cardinaux FR (O = Ouest)
 """
 
@@ -12,7 +13,7 @@ from datetime import datetime
 import requests
 import fitz  # PyMuPDF
 
-# -------- Utilitaires --------
+# ---------- Utilitaires ----------
 def deg_to_compass(deg: float) -> str:
     # Points cardinaux FR (O = Ouest)
     arr = ["N","NNE","NE","ENE","E","ESE","SE","SSE",
@@ -25,52 +26,57 @@ def geocode_city(query: str):
     r = requests.get(url, params={"name": query, "count": 1, "language": "fr", "format": "json"}, timeout=15)
     r.raise_for_status()
     data = r.json()
-    results = data.get("results") or []
-    if not results:
+    res = data.get("results") or []
+    if not res:
         raise ValueError(f"Ville introuvable : {query}")
-    top = results[0]
-    return {"name": top.get("name") or query,
-            "lat": top.get("latitude"),
-            "lon": top.get("longitude"),
-            "timezone": top.get("timezone") or "auto"}
+    top = res[0]
+    return {
+        "name": top.get("name") or query,
+        "lat": top.get("latitude"),
+        "lon": top.get("longitude"),
+        "timezone": top.get("timezone") or "auto",
+    }
 
 def fetch_current_wind(lat: float, lon: float, tz: str = "auto"):
     url = "https://api.open-meteo.com/v1/forecast"
-    params = {"latitude": lat, "longitude": lon,
-              "current": "wind_speed_10m,wind_direction_10m",
-              "timezone": tz if tz else "auto"}
+    params = {
+        "latitude": lat, "longitude": lon,
+        "current": "wind_speed_10m,wind_direction_10m",
+        "timezone": tz if tz else "auto",
+    }
     r = requests.get(url, params=params, timeout=15)
     r.raise_for_status()
     cur = (r.json() or {}).get("current", {})
-    return {"speed_kmh": cur.get("wind_speed_10m"),
-            "deg": cur.get("wind_direction_10m"),
-            "time": cur.get("time")}
+    return {
+        "speed_kmh": cur.get("wind_speed_10m"),
+        "deg": cur.get("wind_direction_10m"),
+        "time": cur.get("time"),
+    }
 
-# -------- Rendu (ligne par ligne) --------
-def draw_right_aligned_text(page, x_right: float, y_top: float, lines,
-                            fontsize: float = 9.0, leading: float = 3.0,
-                            fontname: str = "helv"):
-    """
-    Écrit chaque ligne alignée à droite en mesurant la largeur du texte.
-    Compatible avec PyMuPDF des runners GitHub (utilise fitz.get_text_length()).
-    """
-    color = (0, 0, 0)
-    y = y_top + fontsize  # baseline 1re ligne
-    for txt in lines:
-        try:
-            width = fitz.get_text_length(txt, fontname=fontname, fontsize=fontsize)
-            page.insert_text((x_right - width, y), txt, fontname=fontname, fontsize=fontsize, color=color)
-        except Exception:
-            # Repli si 'helv' indisponible
-            width = fitz.get_text_length(txt, fontname="Times-Roman", fontsize=fontsize)
-            page.insert_text((x_right - width, y), txt, fontname="Times-Roman", fontsize=fontsize, color=color)
-        y += fontsize + leading
+# ---------- Rendu robuste ----------
+def _write_textbox_right(page, rect, text, fontsize):
+    """Essaye d'écrire tout le texte dans un textbox aligné à droite. Retourne True si OK."""
+    try:
+        n = page.insert_textbox(rect, text, fontname="helv", fontsize=fontsize, color=(0,0,0), align=2)
+        if n and n > 0:
+            return True
+    except Exception:
+        pass
+    try:
+        n = page.insert_textbox(rect, text, fontname="Times-Roman", fontsize=fontsize, color=(0,0,0), align=2)
+        if n and n > 0:
+            return True
+    except Exception:
+        pass
+    return False
 
 def draw_cartouche(page, x: float, y: float, w: float, h: float, lines,
-                   fontsize: float = 9.0, fill: bool = True):
-    """Cadre fin gris, fond blanc (désactivable), texte à droite."""
+                   fontsize: float = 10.0, fill: bool = True):
+    """Cadre + fond optionnel + texte noir. Si textbox échoue, plan B ligne-par-ligne."""
     border = (0.75, 0.75, 0.75)
     rect = fitz.Rect(x, y, x + w, y + h)
+
+    # cadre
     shape = page.new_shape()
     shape.draw_rect(rect)
     shape.finish(color=border, fill=(1,1,1) if fill else None, width=0.5)
@@ -79,10 +85,30 @@ def draw_cartouche(page, x: float, y: float, w: float, h: float, lines,
     # zone interne
     p = 6
     inner = fitz.Rect(rect.x0 + p, rect.y0 + p, rect.x1 - p, rect.y1 - p)
-    draw_right_aligned_text(page, inner.x1, inner.y0, lines,
-                            fontsize=fontsize, leading=3.0, fontname="helv")
 
-# -------- Programme principal --------
+    # essai textbox (align=2 = droite)
+    text = "\n".join(lines)
+    if _write_textbox_right(page, inner, text, fontsize):
+        return
+
+    # PLAN B : ligne par ligne alignée à droite (largeur mesurée)
+    y_cursor = inner.y0 + fontsize
+    leading = 3.0
+    for txt in lines:
+        wrote = False
+        for fname in ("helv", "Times-Roman"):
+            try:
+                width = fitz.get_text_length(txt, fontname=fname, fontsize=fontsize)
+                page.insert_text((inner.x1 - width, y_cursor), txt, fontname=fname, fontsize=fontsize, color=(0,0,0))
+                wrote = True
+                break
+            except Exception:
+                continue
+        if not wrote:
+            page.insert_text((inner.x0, y_cursor), txt, fontsize=fontsize, color=(0,0,0))
+        y_cursor += fontsize + leading
+
+# ---------- Programme principal ----------
 def main():
     ap = argparse.ArgumentParser(description="Injecte un cartouche vent (4 lignes) en haut-droite du PDF.")
     ap.add_argument("--ville", required=True)
@@ -101,7 +127,7 @@ def main():
 
     ville = info.get("name") or args.ville
 
-    # Date locale avec année
+    # date locale + année
     when_iso = meteo.get("time")
     if when_iso:
         try:
