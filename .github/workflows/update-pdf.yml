@@ -30,15 +30,15 @@ jobs:
       - name: Installer les dépendances
         run: |
           python -m pip install --upgrade pip
-          pip install meteofrance-api PyMuPDF
+          pip install requests meteofrance-api PyMuPDF
 
-      - name: Générer les PDFs dans docs/ (Météo-France)
+      - name: Générer les PDFs dans docs/ (mixte)
         run: |
           mkdir -p docs
           touch docs/.nojekyll
 
           # Reims
-          python inject_wind_to_pdf_meteofrance.py \
+          python inject_wind_to_pdf_mixed.py \
             --ville "Reims" \
             --input "mon_document.pdf" \
             --output "docs/sortie.pdf" \
@@ -46,7 +46,7 @@ jobs:
             --stamp "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
           # Epernay
-          python inject_wind_to_pdf_meteofrance.py \
+          python inject_wind_to_pdf_mixed.py \
             --ville "Epernay" \
             --input "mon_document_epernay.pdf" \
             --output "docs/sortie_epernay.pdf" \
