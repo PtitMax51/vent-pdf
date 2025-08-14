@@ -27,12 +27,12 @@ jobs:
         with:
           python-version: "3.x"
 
-      - name: Install deps
+      - name: Installer les dépendances
         run: |
           python -m pip install --upgrade pip
           pip install meteofrance-api PyMuPDF
 
-      - name: Generate PDFs into docs/ (Météo-France)
+      - name: Générer les PDFs dans docs/ (Météo-France)
         run: |
           mkdir -p docs
           touch docs/.nojekyll
