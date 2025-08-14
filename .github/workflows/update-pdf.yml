@@ -39,7 +39,7 @@ jobs:
 
           # Reims
           python inject_wind_to_pdf_meteofrance.py \
-            --ville "Reims, France" \
+            --ville "Reims" \
             --input "mon_document.pdf" \
             --output "docs/sortie.pdf" \
             --w 125 --h 85 --fontsize 12 --title-fontsize 14 --margin 12 \
@@ -47,7 +47,7 @@ jobs:
 
           # Epernay
           python inject_wind_to_pdf_meteofrance.py \
-            --ville "Epernay, France" \
+            --ville "Epernay" \
             --input "mon_document_epernay.pdf" \
             --output "docs/sortie_epernay.pdf" \
             --w 125 --h 85 --fontsize 12 --title-fontsize 14 --margin 12 \
