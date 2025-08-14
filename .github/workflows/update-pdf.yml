@@ -1,8 +1,8 @@
-name: Update PDFs (Reims & Epernay) every 5 minutes
+name: Update PDFs (Météo-France) every 5 minutes
 
 on:
   schedule:
-    - cron: "*/5 * * * *"            # toutes les 5 minutes (UTC)
+    - cron: "*/5 * * * *"          # toutes les 5 minutes (UTC)
   workflow_dispatch: {}
 
 concurrency:
@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write                    # nécessaire pour git push
+  contents: write                  # nécessaire pour git push
 
 jobs:
   build:
@@ -30,15 +30,15 @@ jobs:
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          pip install requests PyMuPDF
+          pip install meteofrance-api PyMuPDF
 
-      - name: Generate PDFs into docs/
+      - name: Generate PDFs into docs/ (Météo-France)
         run: |
           mkdir -p docs
           touch docs/.nojekyll
 
           # Reims
-          python inject_wind_to_pdf_openmeteo.py \
+          python inject_wind_to_pdf_meteofrance.py \
             --ville "Reims, France" \
             --input "mon_document.pdf" \
             --output "docs/sortie.pdf" \
@@ -46,7 +46,7 @@ jobs:
             --stamp "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
           # Epernay
-          python inject_wind_to_pdf_openmeteo.py \
+          python inject_wind_to_pdf_meteofrance.py \
             --ville "Epernay, France" \
             --input "mon_document_epernay.pdf" \
             --output "docs/sortie_epernay.pdf" \
@@ -58,5 +58,5 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/.nojekyll docs/sortie.pdf docs/sortie_epernay.pdf
-          git commit -m "auto-update PDFs (Reims & Epernay)" || echo "No changes"
+          git commit -m "auto-update PDFs (Météo-France: Reims & Epernay)" || echo "No changes"
           git push origin HEAD:main
